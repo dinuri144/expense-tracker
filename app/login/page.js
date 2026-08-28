@@ -31,7 +31,7 @@ export default function LoginPage() {
             }
 
             // සාර්ථකව login උනා නම් මුල් පිටුවට යවමු
-            router.push('/');
+            router.push('/dashboard');
         } catch (err) {
             setError('An error occurred. Please try again.');
         }
