@@ -1,14 +1,28 @@
 import clientPromise from "../../../lib/mongodb.js";
 import { ObjectId } from "mongodb";
 import jwt from "jsonwebtoken";
+import { cookies } from "next/headers";
 
 async function getAuthUserId(req) {
+    // 1. මුලින්ම Header එකෙන් ටෝකන් එක බලමු
     const auth = req.headers.get('authorization') || '';
-    if (!auth.startsWith('Bearer ')) return null;
-    const cookieStore = await cookies();
-    const token = auth.slice(7);
+    let token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+
+    // 2. Header එකේ නැත්නම් Cookies වලින් ටෝකන් එක ලබාගමු
+    if (!token) {
+        try {
+            const cookieStore = await cookies();
+            token = cookieStore.get('token')?.value;
+        } catch (e) {
+            // cookies() fail වුවහොත් ignore කරයි
+        }
+    }
+
+    if (!token) return null;
+
     const secret = process.env.JWT_SECRET;
     if (!secret) throw new Error('JWT_SECRET not configured');
+
     try {
         const payload = jwt.verify(token, secret);
         return payload && (payload.sub || payload.userId || payload.id) ? String(payload.sub || payload.userId || payload.id) : null;
@@ -50,7 +64,7 @@ export async function GET(req) {
 // POST - create expense (authenticated)
 export async function POST(req) {
     try {
-        const userId = getAuthUserId(req);
+        const userId = await getAuthUserId(req); // await දමා ඇත
         if (!userId) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 
         const body = await req.json();
@@ -92,14 +106,13 @@ export async function POST(req) {
 // PUT - update an expense (authenticated & owner only)
 export async function PUT(req) {
     try {
-        const userId = getAuthUserId(req);
+        const userId = await getAuthUserId(req); // await දමා ඇත
         if (!userId) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 
         const body = await req.json();
         const id = body && (body.id || body._id);
         if (!id) return new Response(JSON.stringify({ error: 'Missing id in body' }), { status: 400 });
 
-        // Validate and build update object
         const updates = {};
         if (typeof body.description !== 'undefined') updates.description = String(body.description);
         if (typeof body.amount !== 'undefined') {
@@ -124,13 +137,13 @@ export async function PUT(req) {
             { returnDocument: 'after' }
         );
 
-        if (!result.value) {
+        if (!result) {
             return new Response(JSON.stringify({ error: 'Not found or unauthorized' }), { status: 404 });
         }
 
-        const updated = result.value;
+        const updated = result;
         const out = {
-            id: updated._id.toString(),
+            userId: new ObjectId(userId),
             description: updated.description,
             amount: updated.amount,
             category: updated.category,
@@ -149,7 +162,7 @@ export async function PUT(req) {
 // DELETE - delete by ?id=... (authenticated & owner only)
 export async function DELETE(req) {
     try {
-        const userId = getAuthUserId(req);
+        const userId = await getAuthUserId(req); // await දමා ඇත
         if (!userId) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 
         const url = new URL(req.url);
@@ -159,7 +172,6 @@ export async function DELETE(req) {
         const client = await clientPromise;
         const db = client.db();
 
-        // Only delete if the document belongs to the authenticated user
         const result = await db.collection('expenses').deleteOne({ _id: new ObjectId(id), userId });
         if (result.deletedCount === 0) {
             return new Response(JSON.stringify({ error: 'Not found or unauthorized' }), { status: 404 });
