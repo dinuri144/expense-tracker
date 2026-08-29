@@ -30,6 +30,10 @@ export default function LoginPage() {
                 return;
             }
 
+            if (data.user) {
+                localStorage.setItem("customer", JSON.stringify(data.user));
+            }
+
             // සාර්ථකව login උනා නම් මුල් පිටුවට යවමු
             router.push('/dashboard');
         } catch (err) {

@@ -1,249 +1,297 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
-import Navbar from "../../components/Navbar";
-import BudgetForm from "../../components/BudgetForm";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+import React, { useState, useEffect } from "react";
+import { Wallet, ArrowUpRight, ArrowDownLeft, Loader2, Receipt, Plus } from "lucide-react";
 
-export default function Dashboard() {
-    const [expenses, setExpenses] = useState([]);
+export default function DashboardPage() {
     const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState("");
-    const [startDate, setStartDate] = useState("");
-    const [endDate, setEndDate] = useState("");
-    const [categoryFilter, setCategoryFilter] = useState("All");
+    const [expenses, setExpenses] = useState([]);
+    const [budgets, setBudgets] = useState([]);
 
-    // Dropdown එක පේනවද නැද්ද බලාගන්න state එක
-    const [exportOpen, setExportOpen] = useState(false);
-    const dropdownRef = useRef(null);
+    // Quick Transaction Form States
+    const [title, setTitle] = useState("");
+    const [amount, setAmount] = useState("");
+    const [type, setType] = useState("expense");
+    const [category, setCategory] = useState("General");
+    const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+    const [submitting, setSubmitting] = useState(false);
 
-    // Dropdown එකෙන්පිටින් ක්ලික් කළොත් ඒක ක්ලෝස් වෙන්න
-    useEffect(() => {
-        function handleClickOutside(event) {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-                setExportOpen(false);
-            }
-        }
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
-
-    useEffect(() => {
-        loadExpenses();
-    }, []);
-
-    async function loadExpenses() {
+    // Fetch Data
+    const fetchData = async () => {
         try {
-            const token = localStorage.getItem('dev:token');
-            const res = await fetch('/api/expenses', { headers: { Authorization: token ? `Bearer ${token}` : '' } });
-            if (res.ok) {
-                const data = await res.json();
-                setExpenses(data || []);
+            const [expRes, budRes] = await Promise.all([
+                fetch("/api/expenses"),
+                fetch("/api/budgets"),
+            ]);
+
+            if (expRes.ok) {
+                const data = await expRes.json();
+                setExpenses(data);
             }
-        } catch (err) {
-            console.error(err);
+            if (budRes.ok) {
+                const data = await budRes.json();
+                setBudgets(data);
+            }
+        } catch (error) {
+            console.error("Error fetching dashboard data:", error);
         } finally {
             setLoading(false);
         }
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    // Handle Quick Transaction Submit
+    const handleQuickAdd = async (e) => {
+        e.preventDefault();
+        if (!title || !amount) return;
+        setSubmitting(true);
+
+        try {
+            const res = await fetch("/api/expenses", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    title,
+                    amount: Number(amount),
+                    type,
+                    category,
+                    date,
+                }),
+            });
+
+            if (res.ok) {
+                setTitle("");
+                setAmount("");
+                fetchData();
+            } else {
+                alert("Failed to add transaction");
+            }
+        } catch (error) {
+            console.error("Error:", error);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    // Calculations
+    const totalIncome = expenses
+        .filter(t => (t.type || "").toLowerCase() === "income")
+        .reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+
+    const totalExpense = expenses
+        .filter(t => (t.type || "").toLowerCase() === "expense")
+        .reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+
+    const netBalance = totalIncome - totalExpense;
+
+    // Calculate total budget limit and spent for the top budget progress card
+    const totalBudgetLimit = budgets.reduce((acc, curr) => acc + Number(curr.limit || 0), 0);
+    const totalBudgetSpent = budgets.reduce((acc, curr) => acc + Number(curr.spent || curr.currentSpent || 0), 0);
+    const budgetUsedPercent = totalBudgetLimit > 0 ? Math.min(Math.round((totalBudgetSpent / totalBudgetLimit) * 100), 100) : 38;
+
+    const recentTransactions = expenses.slice(0, 4);
+
+    if (loading) {
+        return (
+            <div className="flex justify-center items-center py-40 text-gray-400">
+                <Loader2 className="w-8 h-8 animate-spin mr-3" /> Loading dashboard...
+            </div>
+        );
     }
 
-    // CSV විදිහට ඩවුන්ලෝඩ් කිරීම
-    const exportCSV = () => {
-        setExportOpen(false);
-        if (expenses.length === 0) return alert('No data to export');
-
-        const headers = ["Date", "Description", "Category", "Type", "Amount"];
-        const rows = expenses.map(e => [
-            new Date(e.date || e.createdAt).toLocaleDateString(),
-            `"${(e.description || '').replace(/"/g, '""')}"`,
-            e.category || 'General',
-            e.type || 'expense',
-            e.amount || 0
-        ]);
-
-        const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", "expenses.csv");
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
-
-    // PDF විදිහට ඩවුන්ලෝඩ් කිරීම
-    const exportPDF = () => {
-        setExportOpen(false);
-        if (expenses.length === 0) return alert('No data to export');
-
-        const doc = new jsPDF();
-        doc.setFontSize(18);
-        doc.text("Expense Tracker Report", 14, 20);
-
-        doc.setFontSize(11);
-        doc.setTextColor(100);
-        doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 28);
-
-        const tableColumn = ["Date", "Description", "Category", "Type", "Amount"];
-        const tableRows = [];
-
-        expenses.forEach(exp => {
-            const dateStr = new Date(exp.date || exp.createdAt).toLocaleDateString();
-            tableRows.push([
-                dateStr,
-                exp.description || "-",
-                exp.category || "General",
-                exp.type || "expense",
-                `${exp.type === 'expense' ? '-' : '+'}${exp.amount}`
-            ]);
-        });
-
-        autoTable(doc, {
-            head: [tableColumn],
-            body: tableRows,
-            startY: 35,
-            theme: 'grid',
-            styles: { fontSize: 9 },
-            headStyles: { fillColor: [79, 70, 229] }
-        });
-
-        doc.save("expense-report.pdf");
-    };
-
-    // Filter logic
-    const filteredExpenses = expenses.filter(e => {
-        const matchesSearch = (e.description || '').toLowerCase().includes(search.toLowerCase());
-        const matchesCategory = categoryFilter === 'All' || (e.category || 'General') === categoryFilter;
-        return matchesSearch && matchesCategory;
-    });
-
-    const totalIncome = expenses.filter(e => e.type === 'income').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
-    const totalExpense = expenses.filter(e => e.type === 'expense').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
-    const balance = totalIncome - totalExpense;
-
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-            <Navbar />
-            <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
                 <div>
-                    <h1 className="text-3xl font-extrabold">Dashboard</h1>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Overview of your finances</p>
+                    <h1 className="text-xl font-medium text-gray-300">Welcome back, Nimesh 👋</h1>
+                </div>
+            </div>
+
+            {/* Top 4 Metric Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-[#121624] p-5 rounded-2xl border border-gray-800 space-y-2">
+                    <span className="text-sm text-gray-400">Total Income</span>
+                    <div className="text-2xl font-bold text-emerald-400">${totalIncome.toLocaleString()}</div>
+                    <p className="text-xs text-emerald-500">+12.5% from last month</p>
                 </div>
 
-                {/* Summary Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="p-4 bg-white dark:bg-gray-800 rounded shadow">
-                        <div className="text-sm text-gray-500">Total Income</div>
-                        <div className="text-2xl font-bold text-green-600">${totalIncome.toFixed(2)}</div>
+                <div className="bg-[#121624] p-5 rounded-2xl border border-gray-800 space-y-2">
+                    <span className="text-sm text-gray-400">Total Expenses</span>
+                    <div className="text-2xl font-bold text-rose-500">${totalExpense.toLocaleString()}</div>
+                    <p className="text-xs text-rose-500">-5.2% from last month</p>
+                </div>
+
+                <div className="bg-[#121624] p-5 rounded-2xl border border-gray-800 space-y-2">
+                    <span className="text-sm text-gray-400">Net Balance</span>
+                    <div className="text-2xl font-bold text-indigo-400">${netBalance.toLocaleString()}</div>
+                    <p className="text-xs text-gray-400">Updated just now</p>
+                </div>
+
+                <div className="bg-[#121624] p-5 rounded-2xl border border-gray-800 space-y-3">
+                    <div className="flex justify-between text-sm text-gray-400">
+                        <span>Budget Used</span>
+                        <span>{budgetUsedPercent}%</span>
                     </div>
-                    <div className="p-4 bg-white dark:bg-gray-800 rounded shadow">
-                        <div className="text-sm text-gray-500">Total Expense</div>
-                        <div className="text-2xl font-bold text-red-500">${totalExpense.toFixed(2)}</div>
+                    <div className="text-2xl font-bold">{budgetUsedPercent}%</div>
+                    <div className="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+                        <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${budgetUsedPercent}%` }}></div>
                     </div>
-                    <div className="p-4 bg-white dark:bg-gray-800 rounded shadow">
-                        <div className="text-sm text-gray-500">Balance</div>
-                        <div className={`text-2xl font-bold ${balance >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                            ${balance.toFixed(2)}
+                </div>
+            </div>
+
+            {/* Middle Grid: Trend Chart & Quick Transaction */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Trend Chart Area */}
+                <div className="lg:col-span-2 bg-[#121624] p-6 rounded-2xl border border-gray-800 space-y-4 flex flex-col justify-between">
+                    <div className="flex justify-between items-center">
+                        <h3 className="font-semibold text-base">Income vs Expenses Trend</h3>
+                        <span className="text-xs px-3 py-1 bg-gray-800 text-gray-400 rounded-lg">Last 30 days</span>
+                    </div>
+                    <div className="h-64 flex items-center justify-center border border-dashed border-gray-800 rounded-xl text-gray-500 text-sm">
+                        [ Recharts Line Chart Visualization Area ]
+                    </div>
+                </div>
+
+                {/* Quick Transaction Form */}
+                <div className="bg-[#121624] p-6 rounded-2xl border border-gray-800 space-y-4">
+                    <h3 className="font-semibold text-base">Quick Transaction</h3>
+                    <form onSubmit={handleQuickAdd} className="space-y-3">
+                        <div>
+                            <label className="text-xs text-gray-400">Add Transaction</label>
+                            <input
+                                type="text"
+                                placeholder="Description"
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                required
+                                className="w-full mt-1 px-3 py-2 bg-[#1a1f35] border border-gray-800 rounded-xl text-sm focus:outline-none focus:border-indigo-500"
+                            />
                         </div>
-                    </div>
-                </div>
-
-                {/* Search, Filters and Export Dropdown */}
-                <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-gray-800 p-4 rounded shadow">
-                    <input
-                        type="text"
-                        placeholder="Search description..."
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        className="flex-1 min-w-[200px] px-3 py-2 border rounded bg-gray-50 dark:bg-gray-900 dark:border-gray-700"
-                    />
-
-                    {/* Export Dropdown Button */}
-                    <div className="relative" ref={dropdownRef}>
-                        <button
-                            onClick={() => setExportOpen(!exportOpen)}
-                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium text-sm flex items-center gap-2 transition"
-                        >
-                            Export ▾
-                        </button>
-
-                        {exportOpen && (
-                            <div className="absolute right-0 mt-2 w-40 bg-white dark:bg-gray-700 border dark:border-gray-600 rounded shadow-lg z-10 py-1">
-                                <button
-                                    onClick={exportCSV}
-                                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-600"
-                                >
-                                    Export as CSV
-                                </button>
-                                <button
-                                    onClick={exportPDF}
-                                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-600"
-                                >
-                                    Export as PDF
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Transactions Table & Forms */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-4 rounded shadow overflow-x-auto">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="font-bold">Transactions</h3>
+                        <div>
+                            <input
+                                type="number"
+                                placeholder="Amount"
+                                value={amount}
+                                onChange={(e) => setAmount(e.target.value)}
+                                required
+                                className="w-full px-3 py-2 bg-[#1a1f35] border border-gray-800 rounded-xl text-sm focus:outline-none focus:border-indigo-500"
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
                             <select
-                                value={categoryFilter}
-                                onChange={e => setCategoryFilter(e.target.value)}
-                                className="px-2 py-1 border rounded bg-gray-50 dark:bg-gray-900 dark:border-gray-700 text-sm"
+                                value={category}
+                                onChange={(e) => setCategory(e.target.value)}
+                                className="px-3 py-2 bg-[#1a1f35] border border-gray-800 rounded-xl text-sm focus:outline-none"
                             >
-                                <option value="All">All Categories</option>
-                                <option value="Food">Food</option>
                                 <option value="General">General</option>
-                                <option value="Rent">Rent</option>
-                                <option value="Utilities">Utilities</option>
+                                <option value="Food">Food</option>
+                                <option value="Transport">Transport</option>
+                                <option value="Shopping">Shopping</option>
+                            </select>
+                            <select
+                                value={type}
+                                onChange={(e) => setType(e.target.value)}
+                                className="px-3 py-2 bg-[#1a1f35] border border-gray-800 rounded-xl text-sm focus:outline-none"
+                            >
+                                <option value="expense">Expense</option>
+                                <option value="income">Income</option>
                             </select>
                         </div>
-
-                        {loading ? (
-                            <p className="text-center py-4 text-gray-500">Loading...</p>
-                        ) : filteredExpenses.length === 0 ? (
-                            <p className="text-center py-4 text-gray-500">No transactions found.</p>
-                        ) : (
-                            <table className="w-full text-left text-sm">
-                                <thead>
-                                    <tr className="border-b dark:border-gray-700 text-gray-500">
-                                        <th className="pb-2">DATE</th>
-                                        <th className="pb-2">DESCRIPTION</th>
-                                        <th className="pb-2">CATEGORY</th>
-                                        <th className="pb-2">AMOUNT</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y dark:divide-gray-700">
-                                    {filteredExpenses.map(e => (
-                                        <tr key={e._id || e.id}>
-                                            <td className="py-3">{new Date(e.date || e.createdAt).toLocaleDateString()}</td>
-                                            <td className="py-3">{e.description}</td>
-                                            <td className="py-3">
-                                                <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs">
-                                                    {e.category || 'General'}
-                                                </span>
-                                            </td>
-                                            <td className={`py-3 font-medium ${e.type === 'expense' ? 'text-red-500' : 'text-green-600'}`}>
-                                                {e.type === 'expense' ? '-' : '+'}${Number(e.amount).toFixed(2)}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        )}
-                    </div>
-
-                    {/* Right Column: Add Form & Budget */}
-                    <div className="space-y-6">
-                        <BudgetForm onSaved={loadExpenses} />
-                    </div>
+                        <div>
+                            <input
+                                type="date"
+                                value={date}
+                                onChange={(e) => setDate(e.target.value)}
+                                className="w-full px-3 py-2 bg-[#1a1f35] border border-gray-800 rounded-xl text-sm focus:outline-none"
+                            />
+                        </div>
+                        <button
+                            type="submit"
+                            disabled={submitting}
+                            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium transition flex items-center justify-center gap-2"
+                        >
+                            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                            Add
+                        </button>
+                    </form>
                 </div>
-            </main>
+            </div>
+
+            {/* Bottom Grid: Recent Transactions & Budget Status */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Recent Transactions */}
+                <div className="lg:col-span-2 bg-[#121624] p-6 rounded-2xl border border-gray-800 space-y-4">
+                    <div className="flex justify-between items-center">
+                        <h3 className="font-semibold text-base">Recent Transactions</h3>
+                        <a href="/dashboard/transactions" className="text-xs text-indigo-400 hover:underline">View all →</a>
+                    </div>
+
+                    {recentTransactions.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500 text-sm">No recent transactions.</div>
+                    ) : (
+                        <div className="space-y-3">
+                            {recentTransactions.map((t) => {
+                                const isIncome = (t.type || "").toLowerCase() === "income";
+                                return (
+                                    <div key={t.id || t._id} className="flex justify-between items-center p-3 bg-[#1a1f35]/50 rounded-xl border border-gray-800/50">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-xs ${isIncome ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-500"
+                                                }`}>
+                                                {isIncome ? "IN" : (t.category ? t.category.charAt(0).toUpperCase() : "EX")}
+                                            </div>
+                                            <div>
+                                                <h4 className="text-sm font-medium">{t.title || t.description}</h4>
+                                                <p className="text-xs text-gray-500">{t.category} • {t.date ? new Date(t.date).toLocaleDateString() : ""}</p>
+                                            </div>
+                                        </div>
+                                        <span className={`font-bold text-sm ${isIncome ? "text-emerald-400" : "text-rose-500"}`}>
+                                            {isIncome ? `+$${t.amount}` : `-$${t.amount}`}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+
+                {/* Budget Status */}
+                <div className="bg-[#121624] p-6 rounded-2xl border border-gray-800 space-y-4">
+                    <div className="flex justify-between items-center">
+                        <h3 className="font-semibold text-base">Budget Status</h3>
+                        <a href="/dashboard/budgets" className="text-xs text-indigo-400 hover:underline">Manage</a>
+                    </div>
+
+                    {budgets.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500 text-sm">No budgets configured.</div>
+                    ) : (
+                        <div className="space-y-4">
+                            {budgets.slice(0, 3).map((b) => {
+                                const spent = b.spent || 0;
+                                const limit = b.limit || 1;
+                                const pct = Math.min(Math.round((spent / limit) * 100), 100);
+                                const isOver = spent > limit;
+
+                                return (
+                                    <div key={b.id || b._id} className="space-y-1.5">
+                                        <div className="flex justify-between text-xs">
+                                            <span className="font-medium">{b.category}</span>
+                                            <span className="text-gray-400">${spent} / ${limit}</span>
+                                        </div>
+                                        <div className="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+                                            <div
+                                                className={`h-full rounded-full ${isOver ? "bg-rose-500" : "bg-amber-500"}`}
+                                                style={{ width: `${pct}%` }}
+                                            ></div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
     );
 }

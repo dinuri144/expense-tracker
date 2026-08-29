@@ -1,50 +1,74 @@
-import { NextResponse } from 'next/server';
-import clientPromise from '../../lib/mongodb';
-import { ObjectId } from 'mongodb';
-import jwt from 'jsonwebtoken';
+import clientPromise from "../../../lib/mongodb.js";
+import { ObjectId } from "mongodb";
+import jwt from "jsonwebtoken";
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+async function getAuthUserId(req) {
+    const auth = req.headers.get('authorization') || '';
+    let token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
 
-async function getUser(req) {
+    if (!token) {
+        try {
+            const cookieStore = await cookies();
+            token = cookieStore.get('token')?.value;
+        } catch (e) {
+            // ignore
+        }
+    }
+
+    if (!token) return null;
+
+    const secret = process.env.JWT_SECRET;
+    if (!secret) throw new Error('JWT_SECRET not configured');
+
     try {
-        const authHeader = req.headers.get('authorization');
-        if (!authHeader) return null;
-        const token = authHeader.split(' ')[1];
-        const decoded = jwt.verify(token, JWT_SECRET);
-        return decoded;
+        const payload = jwt.verify(token, secret);
+        return payload && (payload.sub || payload.userId || payload.id) ? String(payload.sub || payload.userId || payload.id) : null;
     } catch (err) {
         return null;
     }
 }
 
+// GET - get goals for the authenticated user
 export async function GET(req) {
     try {
-        const user = await getUser(req);
-        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const userId = await getAuthUserId(req);
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         const client = await clientPromise;
-        const db = client.db(); // Default database from URI
+        const db = client.db();
 
         const goals = await db.collection('goals')
-            .find({ userId: new ObjectId(user.userId) })
+            .find({ userId })
             .sort({ createdAt: -1 })
             .toArray();
 
-        return NextResponse.json(goals, { status: 200 });
+        const out = goals.map(g => ({
+            id: g._id.toString(),
+            title: g.title,
+            targetAmount: g.targetAmount,
+            currentAmount: g.currentAmount,
+            targetDate: g.targetDate,
+            createdAt: g.createdAt,
+        }));
+
+        return NextResponse.json(out, { status: 200 });
     } catch (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: String(error) }, { status: 500 });
     }
 }
 
+// POST - create a goal for the authenticated user
 export async function POST(req) {
     try {
-        const user = await getUser(req);
-        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const userId = await getAuthUserId(req);
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         const body = await req.json();
         const { title, targetAmount, currentAmount, targetDate } = body;
 
-        if (!title || !targetAmount) {
+        if (!title || typeof targetAmount === 'undefined') {
             return NextResponse.json({ error: 'Title and target amount are required' }, { status: 400 });
         }
 
@@ -52,7 +76,7 @@ export async function POST(req) {
         const db = client.db();
 
         const newGoal = {
-            userId: new ObjectId(user.userId),
+            userId,
             title,
             targetAmount: Number(targetAmount),
             currentAmount: currentAmount ? Number(currentAmount) : 0,
@@ -62,8 +86,11 @@ export async function POST(req) {
 
         const result = await db.collection('goals').insertOne(newGoal);
 
-        return NextResponse.json({ _id: result.insertedId, ...newGoal }, { status: 201 });
+        return NextResponse.json({
+            id: result.insertedId.toString(),
+            ...newGoal
+        }, { status: 201 });
     } catch (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: String(error) }, { status: 500 });
     }
 }
