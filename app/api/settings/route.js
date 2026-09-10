@@ -35,7 +35,8 @@ export async function GET(req) {
         const db = client.db();
         const settings = await db.collection("settings").findOne({ userId });
 
-        return new Response(JSON.stringify(settings || { monthlyBudget: 0, weeklyBudget: 0 }), { status: 200 });
+        // Default values එක්ක currency එකත් යවන්න
+        return new Response(JSON.stringify(settings || { monthlyBudget: 0, weeklyBudget: 0, currency: '$' }), { status: 200 });
     } catch (err) {
         return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
     }
@@ -54,6 +55,7 @@ export async function PUT(req) {
             userId,
             monthlyBudget: Number(body.monthlyBudget || 0),
             weeklyBudget: Number(body.weeklyBudget || 0),
+            currency: body.currency || '$', // Frontend එකෙන් එවන currency එක save කරගන්න
             updatedAt: new Date()
         };
 

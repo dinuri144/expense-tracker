@@ -99,46 +99,111 @@ export async function POST(req) {
 export async function PUT(req) {
     try {
         const userId = await getAuthUserId(req);
-        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+        if (!userId) {
+            return NextResponse.json(
+                { error: "Unauthorized" },
+                { status: 401 }
+            );
+        }
 
         const body = await req.json();
-        const { id, title, targetAmount, currentAmount, targetDate } = body;
+
+        const {
+            id,
+            title,
+            targetAmount,
+            currentAmount,
+            targetDate
+        } = body;
 
         if (!id) {
-            return NextResponse.json({ error: 'Goal ID is required' }, { status: 400 });
+            return NextResponse.json(
+                { error: "Goal ID is required" },
+                { status: 400 }
+            );
+        }
+
+        // Validate MongoDB ObjectId
+        if (!ObjectId.isValid(id)) {
+            return NextResponse.json(
+                { error: "Invalid goal ID" },
+                { status: 400 }
+            );
         }
 
         const updates = {};
-        if (typeof title !== 'undefined') updates.title = title;
-        if (typeof targetAmount !== 'undefined') updates.targetAmount = Number(targetAmount);
-        if (typeof currentAmount !== 'undefined') updates.currentAmount = Number(currentAmount);
-        if (typeof targetDate !== 'undefined') updates.targetDate = targetDate ? new Date(targetDate) : null;
+
+        if (typeof title !== "undefined") {
+            updates.title = title;
+        }
+
+        if (typeof targetAmount !== "undefined") {
+            updates.targetAmount = Number(targetAmount);
+        }
+
+        if (typeof currentAmount !== "undefined") {
+            updates.currentAmount = Number(currentAmount);
+        }
+
+        if (typeof targetDate !== "undefined") {
+            updates.targetDate = targetDate
+                ? new Date(targetDate)
+                : null;
+        }
+
         updates.updatedAt = new Date();
 
         const client = await clientPromise;
         const db = client.db();
 
-        const result = await db.collection('goals').findOneAndUpdate(
-            { _id: new ObjectId(id), userId },
-            { $set: updates },
-            { returnDocument: 'after' }
+        const result = await db.collection("goals").findOneAndUpdate(
+            {
+                _id: new ObjectId(id),
+                userId: userId
+            },
+            {
+                $set: updates
+            },
+            {
+                returnDocument: "after"
+            }
         );
 
-        if (!result) {
-            return NextResponse.json({ error: 'Goal not found or unauthorized' }, { status: 404 });
+        // Handle different MongoDB driver return formats
+        const updatedGoal = result?.value || result;
+
+        if (!updatedGoal || !updatedGoal._id) {
+            return NextResponse.json(
+                { error: "Goal not found or unauthorized" },
+                { status: 404 }
+            );
         }
 
-        return NextResponse.json({
-            id: result._id.toString(),
-            title: result.title,
-            targetAmount: result.targetAmount,
-            currentAmount: result.currentAmount,
-            targetDate: result.targetDate,
-            createdAt: result.createdAt,
-            updatedAt: result.updatedAt
-        }, { status: 200 });
+        return NextResponse.json(
+            {
+                id: updatedGoal._id.toString(),
+                title: updatedGoal.title,
+                targetAmount: updatedGoal.targetAmount,
+                currentAmount: updatedGoal.currentAmount,
+                targetDate: updatedGoal.targetDate,
+                createdAt: updatedGoal.createdAt,
+                updatedAt: updatedGoal.updatedAt
+            },
+            { status: 200 }
+        );
+
     } catch (error) {
-        return NextResponse.json({ error: String(error) }, { status: 500 });
+        console.error("PUT /api/goals error:", error);
+
+        return NextResponse.json(
+            {
+                error: error instanceof Error
+                    ? error.message
+                    : String(error)
+            },
+            { status: 500 }
+        );
     }
 }
 

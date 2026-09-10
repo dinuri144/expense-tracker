@@ -1,63 +1,60 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { Loader2, BarChart3, PieChart, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import useCurrency from "../../../hooks/useCurrency";
 
 export default function AnalyticsPage() {
+    const currency = useCurrency();
     const [loading, setLoading] = useState(true);
     const [expenses, setExpenses] = useState([]);
     const [budgets, setBudgets] = useState([]);
 
-    const fetchAnalyticsData = async () => {
-        try {
-            const [expRes, budRes] = await Promise.all([
-                fetch("/api/expenses"),
-                fetch("/api/budgets"),
-            ]);
-
-            if (expRes.ok) {
-                const expData = await expRes.json();
-                setExpenses(expData);
-            }
-            if (budRes.ok) {
-                const budData = await budRes.json();
-                setBudgets(budData);
-            }
-        } catch (error) {
-            console.error("Error fetching analytics data:", error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
     useEffect(() => {
+        const fetchAnalyticsData = async () => {
+            try {
+                const [expRes, budRes] = await Promise.all([
+                    fetch("/api/expenses"),
+                    fetch("/api/budgets"),
+                ]);
+                if (expRes.ok) setExpenses(await expRes.json());
+                if (budRes.ok) setBudgets(await budRes.json());
+            } catch (error) {
+                console.error("Error fetching analytics data:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
         fetchAnalyticsData();
     }, []);
 
-    // Real Calculations from Database
     const totalIncome = expenses
-        .filter(t => (t.type || "").toLowerCase() === "income")
+        .filter((t) => (t.type || "").toLowerCase() === "income")
         .reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
 
     const totalExpense = expenses
-        .filter(t => (t.type || "").toLowerCase() === "expense")
+        .filter((t) => (t.type || "").toLowerCase() === "expense")
         .reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
 
-    const savingsRate = totalIncome > 0 ? Math.max(0, Math.round(((totalIncome - totalExpense) / totalIncome) * 100)) : 0;
+    const savingsRate =
+        totalIncome > 0
+            ? Math.max(0, Math.round(((totalIncome - totalExpense) / totalIncome) * 100))
+            : 0;
 
-    // Group expenses by category from database
     const categoryTotals = expenses
-        .filter(t => (t.type || "").toLowerCase() === "expense")
+        .filter((t) => (t.type || "").toLowerCase() === "expense")
         .reduce((acc, curr) => {
             const cat = curr.category || "General";
             acc[cat] = (acc[cat] || 0) + Number(curr.amount || 0);
             return acc;
         }, {});
 
-    const categoryArray = Object.keys(categoryTotals).map(cat => ({
-        category: cat,
-        amount: categoryTotals[cat],
-        percentage: totalExpense > 0 ? Math.round((categoryTotals[cat] / totalExpense) * 100) : 0
-    })).sort((a, b) => b.amount - a.amount);
+    const categoryArray = Object.keys(categoryTotals)
+        .map((cat) => ({
+            category: cat,
+            amount: categoryTotals[cat],
+            percentage: totalExpense > 0 ? Math.round((categoryTotals[cat] / totalExpense) * 100) : 0,
+        }))
+        .sort((a, b) => b.amount - a.amount);
 
     if (loading) {
         return (
@@ -71,10 +68,11 @@ export default function AnalyticsPage() {
         <div className="space-y-6">
             <div>
                 <h1 className="text-2xl font-bold">Financial Analytics</h1>
-                <p className="text-sm text-gray-400">Deep dive into your spending habits and category distribution from database records.</p>
+                <p className="text-sm text-gray-400">
+                    Deep dive into your spending habits and category distribution from database records.
+                </p>
             </div>
 
-            {/* Top Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-[#121624] p-6 rounded-2xl border border-gray-800 space-y-2">
                     <span className="text-sm text-gray-400">Savings Rate</span>
@@ -84,7 +82,9 @@ export default function AnalyticsPage() {
 
                 <div className="bg-[#121624] p-6 rounded-2xl border border-gray-800 space-y-2">
                     <span className="text-sm text-gray-400">Total Volume Flow</span>
-                    <div className="text-3xl font-bold text-emerald-400">${(totalIncome + totalExpense).toLocaleString()}</div>
+                    <div className="text-3xl font-bold text-emerald-400">
+                        {currency}{(totalIncome + totalExpense).toLocaleString()}
+                    </div>
                     <p className="text-xs text-gray-500">Combined income & expenses</p>
                 </div>
 
@@ -95,14 +95,15 @@ export default function AnalyticsPage() {
                 </div>
             </div>
 
-            {/* Category Breakdown Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-[#121624] p-6 rounded-2xl border border-gray-800 space-y-4">
                     <div className="flex items-center justify-between">
                         <h3 className="font-semibold text-base flex items-center gap-2">
                             <PieChart className="w-5 h-5 text-indigo-400" /> Expenses by Category
                         </h3>
-                        <span className="text-xs text-gray-400">Total Spent: ${totalExpense.toLocaleString()}</span>
+                        <span className="text-xs text-gray-400">
+                            Total Spent: {currency}{totalExpense.toLocaleString()}
+                        </span>
                     </div>
 
                     {categoryArray.length === 0 ? (
@@ -113,13 +114,15 @@ export default function AnalyticsPage() {
                                 <div key={idx} className="space-y-1.5">
                                     <div className="flex justify-between text-sm">
                                         <span className="font-medium text-gray-300">{item.category}</span>
-                                        <span className="text-gray-400">${item.amount.toLocaleString()} ({item.percentage}%)</span>
+                                        <span className="text-gray-400">
+                                            {currency}{item.amount.toLocaleString()} ({item.percentage}%)
+                                        </span>
                                     </div>
                                     <div className="w-full bg-gray-800 h-2.5 rounded-full overflow-hidden">
                                         <div
                                             className="bg-indigo-500 h-full rounded-full transition-all duration-500"
                                             style={{ width: `${item.percentage}%` }}
-                                        ></div>
+                                        />
                                     </div>
                                 </div>
                             ))}
@@ -127,7 +130,6 @@ export default function AnalyticsPage() {
                     )}
                 </div>
 
-                {/* Monthly Trend Insights */}
                 <div className="bg-[#121624] p-6 rounded-2xl border border-gray-800 space-y-4 flex flex-col justify-between">
                     <div>
                         <h3 className="font-semibold text-base flex items-center gap-2 mb-2">
@@ -139,24 +141,32 @@ export default function AnalyticsPage() {
                     <div className="space-y-4 py-4">
                         <div className="p-4 bg-[#1a1f35] rounded-xl border border-gray-800 flex justify-between items-center">
                             <div className="flex items-center gap-3">
-                                <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg"><ArrowUpRight className="w-5 h-5" /></div>
+                                <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg">
+                                    <ArrowUpRight className="w-5 h-5" />
+                                </div>
                                 <div>
                                     <h4 className="text-sm font-medium">Total Inflows</h4>
                                     <p className="text-xs text-gray-400">All recorded income</p>
                                 </div>
                             </div>
-                            <span className="text-lg font-bold text-emerald-400">+${totalIncome.toLocaleString()}</span>
+                            <span className="text-lg font-bold text-emerald-400">
+                                +{currency}{totalIncome.toLocaleString()}
+                            </span>
                         </div>
 
                         <div className="p-4 bg-[#1a1f35] rounded-xl border border-gray-800 flex justify-between items-center">
                             <div className="flex items-center gap-3">
-                                <div className="p-2 bg-rose-500/10 text-rose-500 rounded-lg"><ArrowDownLeft className="w-5 h-5" /></div>
+                                <div className="p-2 bg-rose-500/10 text-rose-500 rounded-lg">
+                                    <ArrowDownLeft className="w-5 h-5" />
+                                </div>
                                 <div>
                                     <h4 className="text-sm font-medium">Total Outflows</h4>
                                     <p className="text-xs text-gray-400">All recorded expenses</p>
                                 </div>
                             </div>
-                            <span className="text-lg font-bold text-rose-500">-${totalExpense.toLocaleString()}</span>
+                            <span className="text-lg font-bold text-rose-500">
+                                -{currency}{totalExpense.toLocaleString()}
+                            </span>
                         </div>
                     </div>
 

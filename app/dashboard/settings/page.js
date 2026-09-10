@@ -15,9 +15,9 @@ export default function SettingsPage() {
     useEffect(() => {
         const fetchUserDataFromDB = async () => {
             try {
-                // 1. Local storage එකෙන් ලොග් වී ඇති යුසර්ගේ ඊමේල් එක ලබා ගැනීම
+                // 1. get the logged-in user's email from local storage
                 const localUser = localStorage.getItem("customer") || localStorage.getItem("user");
-                console.log("Local User from storage:", localUser); // මේක බ්‍රවුසරයේ Console එකේ පෙන්වයි
+                console.log("Local User from storage:", localUser);
 
                 let userEmail = "";
 
@@ -35,10 +35,10 @@ export default function SettingsPage() {
 
                 console.log("Fetching DB for email:", userEmail);
 
-                // 2. ඩේටාබේස් API එකෙන් ඩේටා Fetch කරගැනීම
+                // 2. fetch the user's profile data from the database using the email
                 const res = await fetch(`/api/profile?email=${encodeURIComponent(userEmail)}`);
                 const data = await res.json();
-                console.log("API Response:", data); // API එකෙන් එන ඩේටා මෙතැන බලාගත හැක
+                console.log("API Response:", data);
 
                 if (data.success && data.user) {
                     setName(data.user.name || "");
@@ -57,7 +57,7 @@ export default function SettingsPage() {
                 console.error("Error fetching profile from database:", error);
             }
 
-            // 3. අනෙකුත් සැකසුම් ලබා ගැනීම
+            // 3. another fetch for user settings from local storage (if available)
             const savedSettings = localStorage.getItem("user_settings");
             if (savedSettings) {
                 try {
@@ -79,7 +79,7 @@ export default function SettingsPage() {
         setSavedSuccess(false);
 
         try {
-            // 1. ඩේටාබේස් API එකට (PUT request) ඩේටා යැවීම
+            // 1. send the updated profile and settings to the backend API to save in the database
             const res = await fetch("/api/profile", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -92,7 +92,7 @@ export default function SettingsPage() {
                 throw new Error(result.error || "Failed to update database");
             }
 
-            // 2. Local Storage එකත් අප්ඩේට් කරගැනීම
+            // 2. update local storage with the new profile and settings
             const updatedUser = { name, email };
             localStorage.setItem("customer", JSON.stringify(updatedUser));
 
@@ -105,7 +105,7 @@ export default function SettingsPage() {
             setLoading(false);
             setSavedSuccess(true);
 
-            // ✅ මෙන්න මේ Custom Event එක හරහා එකම ටැබ් එක ඇතුළේ Sidebar එක සහ Header එක ක්ෂණිකව අප්ඩේට් කරයි
+
             window.dispatchEvent(new Event("userDataChanged"));
 
             setTimeout(() => setSavedSuccess(false), 3000);

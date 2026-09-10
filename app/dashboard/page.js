@@ -1,10 +1,10 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { Wallet, ArrowUpRight, ArrowDownLeft, Loader2, Receipt, Plus } from "lucide-react";
-import ReactMarkdown from 'react-markdown';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import ReactMarkdown from "react-markdown";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import useCurrency from "../../hooks/useCurrency";
 
-// AI Insights Section Component
 function AIInsightsSection({ transactions }) {
     const [insights, setInsights] = useState("");
     const [loading, setLoading] = useState(false);
@@ -57,12 +57,12 @@ function AIInsightsSection({ transactions }) {
 }
 
 export default function DashboardPage() {
+    const currency = useCurrency();
     const [loading, setLoading] = useState(true);
     const [expenses, setExpenses] = useState([]);
     const [budgets, setBudgets] = useState([]);
     const [categories, setCategories] = useState([]);
 
-    // Quick Transaction Form States
     const [description, setDescription] = useState("");
     const [amount, setAmount] = useState("");
     const [type, setType] = useState("expense");
@@ -70,30 +70,23 @@ export default function DashboardPage() {
     const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
     const [submitting, setSubmitting] = useState(false);
 
-    // New Category Inline States
     const [isAddingNewCategory, setIsAddingNewCategory] = useState(false);
     const [newCategoryName, setNewCategoryName] = useState("");
 
-    // Fetch Data (Expenses, Budgets, and Categories)
     const fetchData = async () => {
         try {
             const [expRes, budRes, catRes] = await Promise.all([
                 fetch("/api/expenses"),
                 fetch("/api/budgets"),
-                fetch("/api/categories")
+                fetch("/api/categories"),
             ]);
 
-            if (expRes.ok) {
-                const data = await expRes.json();
-                setExpenses(data);
-            }
-            if (budRes.ok) {
-                const data = await budRes.json();
-                setBudgets(data);
-            }
+            if (expRes.ok) setExpenses(await expRes.json());
+            if (budRes.ok) setBudgets(await budRes.json());
+
             if (catRes.ok) {
                 const data = await catRes.json();
-                const catList = data.map(c => typeof c === 'string' ? c : c.name);
+                const catList = data.map((c) => (typeof c === "string" ? c : c.name));
                 setCategories(catList.length > 0 ? catList : ["General", "Food", "Transport", "Shopping"]);
             } else {
                 setCategories(["General", "Food", "Transport", "Shopping"]);
@@ -110,7 +103,6 @@ export default function DashboardPage() {
         fetchData();
     }, []);
 
-    // Handle Adding a New Category on the fly
     const handleCreateCategory = async () => {
         if (!newCategoryName.trim()) return;
         const formattedCat = newCategoryName.trim();
@@ -121,28 +113,19 @@ export default function DashboardPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ name: formattedCat }),
             });
-
-            if (res.ok) {
-                setCategories(prev => [...prev, formattedCat]);
-                setCategory(formattedCat);
-                setNewCategoryName("");
-                setIsAddingNewCategory(false);
-            } else {
-                setCategories(prev => [...prev, formattedCat]);
-                setCategory(formattedCat);
-                setNewCategoryName("");
-                setIsAddingNewCategory(false);
-            }
+            setCategories((prev) => [...prev, formattedCat]);
+            setCategory(formattedCat);
+            setNewCategoryName("");
+            setIsAddingNewCategory(false);
         } catch (err) {
             console.error("Error creating category:", err);
-            setCategories(prev => [...prev, formattedCat]);
+            setCategories((prev) => [...prev, formattedCat]);
             setCategory(formattedCat);
             setNewCategoryName("");
             setIsAddingNewCategory(false);
         }
     };
 
-    // Handle Quick Transaction Submit
     const handleQuickAdd = async (e) => {
         e.preventDefault();
         if (!description || !amount) return;
@@ -175,26 +158,28 @@ export default function DashboardPage() {
         }
     };
 
-    // Calculations
     const totalIncome = expenses
-        .filter(t => (t.type || "").toLowerCase() === "income")
+        .filter((t) => (t.type || "").toLowerCase() === "income")
         .reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
 
     const totalExpense = expenses
-        .filter(t => (t.type || "").toLowerCase() === "expense")
+        .filter((t) => (t.type || "").toLowerCase() === "expense")
         .reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
 
     const netBalance = totalIncome - totalExpense;
 
     const totalBudgetLimit = budgets.reduce((acc, curr) => acc + Number(curr.limit || 0), 0);
-    const totalBudgetSpent = budgets.reduce((acc, curr) => acc + Number(curr.spent || curr.currentSpent || 0), 0);
-    const budgetUsedPercent = totalBudgetLimit > 0 ? Math.min(Math.round((totalBudgetSpent / totalBudgetLimit) * 100), 100) : 11;
+    const totalBudgetSpent = budgets.reduce(
+        (acc, curr) => acc + Number(curr.spent || curr.currentSpent || 0),
+        0
+    );
+    const budgetUsedPercent =
+        totalBudgetLimit > 0 ? Math.min(Math.round((totalBudgetSpent / totalBudgetLimit) * 100), 100) : 0;
 
     const recentTransactions = expenses.slice(0, 4);
 
-    // Prepare Chart Data grouped by Date
     const chartDataMap = {};
-    expenses.forEach(item => {
+    expenses.forEach((item) => {
         if (!item.date) return;
         const dateStr = item.date.split("T")[0];
         if (!chartDataMap[dateStr]) {
@@ -207,7 +192,6 @@ export default function DashboardPage() {
             chartDataMap[dateStr].expense += amt;
         }
     });
-
     const chartData = Object.values(chartDataMap).sort((a, b) => new Date(a.date) - new Date(b.date));
 
     if (loading) {
@@ -220,25 +204,29 @@ export default function DashboardPage() {
 
     return (
         <div className="space-y-6">
-
-            {/* Top 4 Metric Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-[#121624] p-5 rounded-2xl border border-gray-800 space-y-2">
                     <span className="text-sm text-gray-400">Total Income</span>
-                    <div className="text-2xl font-bold text-emerald-400">${totalIncome.toLocaleString()}</div>
-                    <p className="text-xs text-emerald-500">+12.5% from last month</p>
+                    <div className="text-2xl font-bold text-emerald-400">
+                        {currency}{totalIncome.toLocaleString()}
+                    </div>
+                   
                 </div>
 
                 <div className="bg-[#121624] p-5 rounded-2xl border border-gray-800 space-y-2">
                     <span className="text-sm text-gray-400">Total Expenses</span>
-                    <div className="text-2xl font-bold text-rose-500">${totalExpense.toLocaleString()}</div>
-                    <p className="text-xs text-rose-500">-5.2% from last month</p>
+                    <div className="text-2xl font-bold text-rose-500">
+                        {currency}{totalExpense.toLocaleString()}
+                    </div>
+                  
                 </div>
 
                 <div className="bg-[#121624] p-5 rounded-2xl border border-gray-800 space-y-2">
                     <span className="text-sm text-gray-400">Net Balance</span>
-                    <div className="text-2xl font-bold text-indigo-400">${netBalance.toLocaleString()}</div>
-                    <p className="text-xs text-gray-400">Updated just now</p>
+                    <div className="text-2xl font-bold text-indigo-400">
+                        {currency}{netBalance.toLocaleString()}
+                    </div>
+
                 </div>
 
                 <div className="bg-[#121624] p-5 rounded-2xl border border-gray-800 space-y-3">
@@ -248,15 +236,12 @@ export default function DashboardPage() {
                     </div>
                     <div className="text-2xl font-bold">{budgetUsedPercent}%</div>
                     <div className="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
-                        <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${budgetUsedPercent}%` }}></div>
+                        <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${budgetUsedPercent}%` }} />
                     </div>
                 </div>
             </div>
 
-            {/* Middle Grid: Trend Chart & Quick Transaction */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-                {/* Trend Chart Area */}
                 <div className="lg:col-span-2 bg-[#121624] p-6 rounded-2xl border border-gray-800 space-y-4">
                     <div className="flex justify-between items-center">
                         <h3 className="font-semibold text-base">Income vs Expenses Trend</h3>
@@ -268,8 +253,8 @@ export default function DashboardPage() {
                                 <XAxis dataKey="date" stroke="#6b7280" fontSize={12} />
                                 <YAxis stroke="#6b7280" fontSize={12} />
                                 <Tooltip
-                                    contentStyle={{ backgroundColor: '#1a1f35', borderColor: '#374151', borderRadius: '0.75rem' }}
-                                    itemStyle={{ color: '#fff' }}
+                                    contentStyle={{ backgroundColor: "#1a1f35", borderColor: "#374151", borderRadius: "0.75rem" }}
+                                    formatter={(value) => [`${currency}${Number(value).toLocaleString()}`, ""]}
                                 />
                                 <Legend />
                                 <Line type="monotone" dataKey="income" name="Income" stroke="#10b981" strokeWidth={2} dot={false} />
@@ -279,7 +264,6 @@ export default function DashboardPage() {
                     </div>
                 </div>
 
-                {/* Quick Transaction Form */}
                 <div className="bg-[#121624] p-6 rounded-2xl border border-gray-800 space-y-4">
                     <h3 className="font-semibold text-base">Quick Transaction</h3>
                     <form onSubmit={handleQuickAdd} className="space-y-3">
@@ -297,7 +281,7 @@ export default function DashboardPage() {
                         <div>
                             <input
                                 type="number"
-                                placeholder="Amount"
+                                placeholder={`Amount (${currency})`}
                                 value={amount}
                                 onChange={(e) => setAmount(e.target.value)}
                                 required
@@ -305,16 +289,12 @@ export default function DashboardPage() {
                             />
                         </div>
                         <div className="grid grid-cols-2 gap-2">
-                            {/* Dynamic Category Selector */}
                             {!isAddingNewCategory ? (
                                 <select
                                     value={category}
                                     onChange={(e) => {
-                                        if (e.target.value === "__add_new__") {
-                                            setIsAddingNewCategory(true);
-                                        } else {
-                                            setCategory(e.target.value);
-                                        }
+                                        if (e.target.value === "__add_new__") setIsAddingNewCategory(true);
+                                        else setCategory(e.target.value);
                                     }}
                                     className="px-3 py-2 bg-[#1a1f35] border border-gray-800 rounded-xl text-sm focus:outline-none text-gray-200"
                                 >
@@ -333,20 +313,8 @@ export default function DashboardPage() {
                                         className="w-full px-2 py-1 bg-[#1a1f35] border border-indigo-500 rounded-xl text-xs focus:outline-none text-white"
                                         autoFocus
                                     />
-                                    <button
-                                        type="button"
-                                        onClick={handleCreateCategory}
-                                        className="px-2 py-1 bg-indigo-600 text-white rounded-lg text-xs"
-                                    >
-                                        Add
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsAddingNewCategory(false)}
-                                        className="px-2 py-1 bg-gray-700 text-gray-300 rounded-lg text-xs"
-                                    >
-                                        ✕
-                                    </button>
+                                    <button type="button" onClick={handleCreateCategory} className="px-2 py-1 bg-indigo-600 text-white rounded-lg text-xs">Add</button>
+                                    <button type="button" onClick={() => setIsAddingNewCategory(false)} className="px-2 py-1 bg-gray-700 text-gray-300 rounded-lg text-xs">✕</button>
                                 </div>
                             )}
 
@@ -379,13 +347,9 @@ export default function DashboardPage() {
                 </div>
             </div>
 
-            {/* AI Insights */}
             <AIInsightsSection transactions={expenses} />
 
-            {/* Bottom Grid: Recent Transactions & Budget Status */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-                {/* Recent Transactions */}
                 <div className="lg:col-span-2 bg-[#121624] p-6 rounded-2xl border border-gray-800 space-y-4">
                     <div className="flex justify-between items-center">
                         <h3 className="font-semibold text-base">Recent Transactions</h3>
@@ -402,15 +366,17 @@ export default function DashboardPage() {
                                     <div key={t.id || t._id} className="flex justify-between items-center p-3 bg-[#1a1f35]/50 rounded-xl border border-gray-800/50">
                                         <div className="flex items-center gap-3">
                                             <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-xs ${isIncome ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-500"}`}>
-                                                {isIncome ? "IN" : (t.category ? t.category.charAt(0).toUpperCase() : "EX")}
+                                                {isIncome ? "IN" : t.category ? t.category.charAt(0).toUpperCase() : "EX"}
                                             </div>
                                             <div>
                                                 <h4 className="text-sm font-medium">{t.title || t.description}</h4>
-                                                <p className="text-xs text-gray-500">{t.category} • {t.date ? new Date(t.date).toLocaleDateString() : ""}</p>
+                                                <p className="text-xs text-gray-500">
+                                                    {t.category} • {t.date ? new Date(t.date).toLocaleDateString() : ""}
+                                                </p>
                                             </div>
                                         </div>
                                         <span className={`font-bold text-sm ${isIncome ? "text-emerald-400" : "text-rose-500"}`}>
-                                            {isIncome ? `+$${t.amount}` : `-$${t.amount}`}
+                                            {isIncome ? `+${currency}${t.amount}` : `-${currency}${t.amount}`}
                                         </span>
                                     </div>
                                 );
@@ -419,7 +385,6 @@ export default function DashboardPage() {
                     )}
                 </div>
 
-                {/* Budget Status */}
                 <div className="bg-[#121624] p-6 rounded-2xl border border-gray-800 space-y-4">
                     <div className="flex justify-between items-center">
                         <h3 className="font-semibold text-base">Budget Status</h3>
@@ -440,13 +405,12 @@ export default function DashboardPage() {
                                     <div key={b.id || b._id} className="space-y-1.5">
                                         <div className="flex justify-between text-xs">
                                             <span className="font-medium">{b.category}</span>
-                                            <span className="text-gray-400">${spent} / ${limit}</span>
+                                            <span className="text-gray-400">
+                                                {currency}{spent} / {currency}{limit}
+                                            </span>
                                         </div>
                                         <div className="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
-                                            <div
-                                                className={`h-full rounded-full ${isOver ? "bg-rose-500" : "bg-amber-500"}`}
-                                                style={{ width: `${pct}%` }}
-                                            ></div>
+                                            <div className={`h-full rounded-full ${isOver ? "bg-rose-500" : "bg-amber-500"}`} style={{ width: `${pct}%` }} />
                                         </div>
                                     </div>
                                 );
