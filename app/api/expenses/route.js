@@ -31,6 +31,14 @@ async function getAuthUserId(req) {
     }
 }
 
+// Helper function to format category (Food, Transport ආදී ලෙස සෑමවිටම පළමු අකුර කැපිටල් කිරීමට)
+function formatCategory(category) {
+    if (!category) return 'General';
+    const trimmed = category.trim();
+    if (trimmed.length === 0) return 'General';
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+}
+
 // GET - list expenses (only for authenticated user)
 export async function GET(req) {
     try {
@@ -64,7 +72,7 @@ export async function GET(req) {
 // POST - create expense (authenticated)
 export async function POST(req) {
     try {
-        const userId = await getAuthUserId(req); // await දමා ඇත
+        const userId = await getAuthUserId(req);
         if (!userId) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 
         const body = await req.json();
@@ -78,7 +86,7 @@ export async function POST(req) {
             userId,
             description: body.description,
             amount: Number(body.amount),
-            category: body.category || 'General',
+            category: formatCategory(body.category), // මෙහිදී කැටගරි නම නියමිත ෆෝමැට් එකට හැරේ
             type: body.type || 'expense',
             date: body.date || new Date().toISOString().slice(0, 10),
             createdAt: new Date(),
@@ -106,7 +114,7 @@ export async function POST(req) {
 // PUT - update an expense (authenticated & owner only)
 export async function PUT(req) {
     try {
-        const userId = await getAuthUserId(req); // await දමා ඇත
+        const userId = await getAuthUserId(req);
         if (!userId) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 
         const body = await req.json();
@@ -120,7 +128,8 @@ export async function PUT(req) {
             if (Number.isNaN(num)) return new Response(JSON.stringify({ error: 'Invalid amount' }), { status: 400 });
             updates.amount = num;
         }
-        if (typeof body.category !== 'undefined') updates.category = String(body.category || 'General');
+        // මෙහිදීද කැටගරි නම නිවැරදි ෆෝමැට් එකට හැරේ
+        if (typeof body.category !== 'undefined') updates.category = formatCategory(body.category);
         if (typeof body.type !== 'undefined') updates.type = body.type === 'income' ? 'income' : 'expense';
         if (typeof body.date !== 'undefined') updates.date = String(body.date);
 
@@ -162,7 +171,7 @@ export async function PUT(req) {
 // DELETE - delete by ?id=... (authenticated & owner only)
 export async function DELETE(req) {
     try {
-        const userId = await getAuthUserId(req); // await දමා ඇත
+        const userId = await getAuthUserId(req);
         if (!userId) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 
         const url = new URL(req.url);

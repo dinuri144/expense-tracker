@@ -10,12 +10,27 @@ export default function TransactionsPage() {
 
     // Add Transaction Modal State
     const [showModal, setShowModal] = useState(false);
-    const [title, setTitle] = useState("");
+    const [description, setDescription] = useState("");
     const [amount, setAmount] = useState("");
     const [type, setType] = useState("expense"); // expense or income
     const [category, setCategory] = useState("Food");
     const [date, setDate] = useState("");
     const [submitting, setSubmitting] = useState(false);
+
+    // Edit Modal States (මෙම කොටස අලුතින් එකතු විය යුතුය)
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [currentEditingId, setCurrentEditingId] = useState(null);
+    const [editFormData, setEditFormData] = useState({
+        description: '',
+        amount: '',
+        category: 'General',
+        type: 'expense',
+        date: '',
+    });
+
+    const [categories, setCategories] = useState(["Food", "Transport", "Salary", "General"]);
+    const [isAddingNewCategory, setIsAddingNewCategory] = useState(false);
+    const [newCategoryName, setNewCategoryName] = useState("");
 
     // 1. Fetch Transactions from API
     const fetchTransactions = async () => {
@@ -36,6 +51,18 @@ export default function TransactionsPage() {
         fetchTransactions();
     }, []);
 
+    // Handle Create New Category
+    const handleCreateCategory = (e) => {
+        e.preventDefault();
+        if (newCategoryName.trim() && !category.includes(newCategoryName.trim())) {
+            const updatedCategories = [...category, newCategoryName.trim()];
+            setCategory(updatedCategories);
+            setCategory(newCategoryName.trim());
+            setNewCategoryName("");
+            setIsAddingNewCategory(false);
+        }
+    };
+
     // 2. Handle Add Transaction
     const handleCreateTransaction = async (e) => {
         e.preventDefault();
@@ -46,7 +73,7 @@ export default function TransactionsPage() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    title,
+                    description,
                     amount: Number(amount),
                     type,
                     category,
@@ -55,7 +82,7 @@ export default function TransactionsPage() {
             });
 
             if (res.ok) {
-                setTitle("");
+                setDescription("");
                 setAmount("");
                 setShowModal(false);
                 fetchTransactions();
@@ -67,6 +94,43 @@ export default function TransactionsPage() {
             console.error("Error saving transaction:", error);
         } finally {
             setSubmitting(false);
+        }
+    };
+
+    // Edit Modal Open Handler (මෙම ෆන්ක්ෂන් එක එකතු කරන්න)
+    const handleOpenEdit = (transaction) => {
+        setCurrentEditingId(transaction.id || transaction._id);
+        setEditFormData({
+            description: transaction.title || transaction.description,
+            amount: transaction.amount,
+            category: transaction.category || 'General',
+            type: transaction.type || 'expense',
+            date: transaction.date ? transaction.date.split("T")[0] : '',
+        });
+        setIsEditModalOpen(true);
+    };
+
+    // Update Submit Handler (මෙම ෆන්ක්ෂන් එක එකතු කරන්න)
+    const handleUpdateSubmit = async (e) => {
+        e.preventDefault();
+        try {
+            const res = await fetch('/api/expenses', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: currentEditingId,
+                    ...editFormData,
+                }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setIsEditModalOpen(false);
+                fetchTransactions();
+            } else {
+                alert(data.error || 'Failed to update transaction');
+            }
+        } catch (err) {
+            console.error('Error updating transaction:', err);
         }
     };
 
@@ -179,15 +243,24 @@ export default function TransactionsPage() {
                                                 </span>
                                             </td>
                                             <td className="py-4 px-6">
-                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${isIncome ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-500"
-                                                    }`}>
+                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${isIncome ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-500"}`}>
                                                     {isIncome ? "Income" : "Expense"}
                                                 </span>
                                             </td>
                                             <td className={`py-4 px-6 font-bold ${isIncome ? "text-emerald-600" : "text-gray-900 dark:text-white"}`}>
                                                 {isIncome ? `+$${t.amount}` : `-$${t.amount}`}
                                             </td>
-                                            <td className="py-4 px-6 text-right">
+                                            <td className="py-4 px-6 text-right space-x-1">
+                                                {/* Edit Button */}
+                                                <button
+                                                    onClick={() => handleOpenEdit(t)}
+                                                    className="p-1.5 hover:bg-indigo-500/10 hover:text-indigo-500 rounded-lg text-gray-400 transition"
+                                                    title="Edit"
+                                                >
+                                                    <Edit3 className="w-4 h-4" />
+                                                </button>
+
+                                                {/* Delete Button */}
                                                 <button
                                                     onClick={() => handleDelete(id)}
                                                     className="p-1.5 hover:bg-rose-500/10 hover:text-rose-500 rounded-lg text-gray-400 transition"
@@ -222,8 +295,8 @@ export default function TransactionsPage() {
                                 <input
                                     type="text"
                                     placeholder="e.g., Grocery Shopping"
-                                    value={title}
-                                    onChange={(e) => setTitle(e.target.value)}
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
                                     required
                                     className="w-full mt-1 px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                 />
@@ -256,14 +329,49 @@ export default function TransactionsPage() {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="text-xs font-medium text-gray-500">Category</label>
-                                    <input
-                                        type="text"
-                                        placeholder="Food, Transport..."
-                                        value={category}
-                                        onChange={(e) => setCategory(e.target.value)}
-                                        className="w-full mt-1 px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none"
-                                    />
+                                    {!isAddingNewCategory ? (
+                                        <select
+                                            value={category}
+                                            onChange={(e) => {
+                                                if (e.target.value === "__add_new__") {
+                                                    setIsAddingNewCategory(true);
+                                                } else {
+                                                    setCategory(e.target.value);
+                                                }
+                                            }}
+                                            className="px-3 py-2 bg-[#1a1f35] border border-gray-800 rounded-xl text-sm focus:outline-none text-gray-200"
+                                        >
+                                            {categories.map((cat, idx) => (
+                                                <option key={idx} value={cat}>{cat}</option>
+                                            ))}
+                                            <option value="__add_new__" className="text-indigo-400 font-semibold">+ Add New Category</option>
+                                        </select>
+                                    ) : (
+                                        <div className="flex gap-1">
+                                            <input
+                                                type="text"
+                                                placeholder="New category..."
+                                                value={newCategoryName}
+                                                onChange={(e) => setNewCategoryName(e.target.value)}
+                                                className="w-full px-2 py-1 bg-[#1a1f35] border border-indigo-500 rounded-xl text-xs focus:outline-none text-white"
+                                                autoFocus
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={handleCreateCategory}
+                                                className="px-2 py-1 bg-indigo-600 text-white rounded-lg text-xs"
+                                            >
+                                                Add
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsAddingNewCategory(false)}
+                                                className="px-2 py-1 bg-gray-700 text-gray-300 rounded-lg text-xs"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                                 <div>
                                     <label className="text-xs font-medium text-gray-500">Date</label>
@@ -291,6 +399,94 @@ export default function TransactionsPage() {
                                 >
                                     {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                                     Add Transaction
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Transaction Modal */}
+            {isEditModalOpen && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl w-full max-w-md p-6 space-y-6 shadow-2xl">
+                        <div className="flex justify-between items-center">
+                            <h2 className="text-xl font-bold">Edit Transaction</h2>
+                            <button onClick={() => setIsEditModalOpen(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-gray-400">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleUpdateSubmit} className="space-y-4">
+                            <div>
+                                <label className="text-xs font-medium text-gray-500">Description / Title</label>
+                                <input
+                                    type="text"
+                                    value={editFormData.description}
+                                    onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                                    required
+                                    className="w-full mt-1 px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-medium text-gray-500">Amount ($)</label>
+                                    <input
+                                        type="number"
+                                        value={editFormData.amount}
+                                        onChange={(e) => setEditFormData({ ...editFormData, amount: e.target.value })}
+                                        required
+                                        className="w-full mt-1 px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-medium text-gray-500">Type</label>
+                                    <select
+                                        value={editFormData.type}
+                                        onChange={(e) => setEditFormData({ ...editFormData, type: e.target.value })}
+                                        className="w-full mt-1 px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none"
+                                    >
+                                        <option value="expense">Expense</option>
+                                        <option value="income">Income</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-medium text-gray-500">Category</label>
+                                    <input
+                                        type="text"
+                                        value={editFormData.category}
+                                        onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}
+                                        className="w-full mt-1 px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-medium text-gray-500">Date</label>
+                                    <input
+                                        type="date"
+                                        value={editFormData.date}
+                                        onChange={(e) => setEditFormData({ ...editFormData, date: e.target.value })}
+                                        className="w-full mt-1 px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsEditModalOpen(false)}
+                                    className="px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium shadow-lg shadow-indigo-600/20 transition flex items-center gap-2"
+                                >
+                                    Save Changes
                                 </button>
                             </div>
                         </form>

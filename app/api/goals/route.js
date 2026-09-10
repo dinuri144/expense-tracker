@@ -94,3 +94,78 @@ export async function POST(req) {
         return NextResponse.json({ error: String(error) }, { status: 500 });
     }
 }
+
+// PUT - update a goal or add funds
+export async function PUT(req) {
+    try {
+        const userId = await getAuthUserId(req);
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+        const body = await req.json();
+        const { id, title, targetAmount, currentAmount, targetDate } = body;
+
+        if (!id) {
+            return NextResponse.json({ error: 'Goal ID is required' }, { status: 400 });
+        }
+
+        const updates = {};
+        if (typeof title !== 'undefined') updates.title = title;
+        if (typeof targetAmount !== 'undefined') updates.targetAmount = Number(targetAmount);
+        if (typeof currentAmount !== 'undefined') updates.currentAmount = Number(currentAmount);
+        if (typeof targetDate !== 'undefined') updates.targetDate = targetDate ? new Date(targetDate) : null;
+        updates.updatedAt = new Date();
+
+        const client = await clientPromise;
+        const db = client.db();
+
+        const result = await db.collection('goals').findOneAndUpdate(
+            { _id: new ObjectId(id), userId },
+            { $set: updates },
+            { returnDocument: 'after' }
+        );
+
+        if (!result) {
+            return NextResponse.json({ error: 'Goal not found or unauthorized' }, { status: 404 });
+        }
+
+        return NextResponse.json({
+            id: result._id.toString(),
+            title: result.title,
+            targetAmount: result.targetAmount,
+            currentAmount: result.currentAmount,
+            targetDate: result.targetDate,
+            createdAt: result.createdAt,
+            updatedAt: result.updatedAt
+        }, { status: 200 });
+    } catch (error) {
+        return NextResponse.json({ error: String(error) }, { status: 500 });
+    }
+}
+
+// DELETE - delete a goal
+export async function DELETE(req) {
+    try {
+        const userId = await getAuthUserId(req);
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+        const url = new URL(req.url);
+        const id = url.searchParams.get('id');
+
+        if (!id) {
+            return NextResponse.json({ error: 'Goal ID is required' }, { status: 400 });
+        }
+
+        const client = await clientPromise;
+        const db = client.db();
+
+        const result = await db.collection('goals').deleteOne({ _id: new ObjectId(id), userId });
+
+        if (result.deletedCount === 0) {
+            return NextResponse.json({ error: 'Goal not found or unauthorized' }, { status: 404 });
+        }
+
+        return NextResponse.json({ success: true }, { status: 200 });
+    } catch (error) {
+        return NextResponse.json({ error: String(error) }, { status: 500 });
+    }
+}

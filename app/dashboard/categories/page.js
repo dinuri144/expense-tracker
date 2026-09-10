@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { Loader2, Tag, Plus, X } from "lucide-react";
+import { Loader2, Tag, Plus, X, Trash2 } from "lucide-react";
 
 export default function CategoriesPage() {
     const [loading, setLoading] = useState(true);
@@ -68,6 +68,15 @@ export default function CategoriesPage() {
         setSubmitting(false);
     };
 
+    // Delete custom category handler
+    const handleDeleteCategory = (categoryNameToDelete) => {
+        if (!confirm(`Are you sure you want to delete "${categoryNameToDelete}"?`)) return;
+
+        const updated = customCategories.filter(c => c.name !== categoryNameToDelete);
+        setCustomCategories(updated);
+        localStorage.setItem("custom_categories", JSON.stringify(updated));
+    };
+
     // Collect only real database categories and custom added ones
     const incomeCategoriesSet = new Set();
     const expenseCategoriesSet = new Set();
@@ -129,15 +138,27 @@ export default function CategoriesPage() {
                     <p className="text-xs text-gray-500">No income categories found. Add transactions or custom categories.</p>
                 ) : (
                     <div className="flex flex-wrap gap-3">
-                        {incomeCategories.map((cat, index) => (
-                            <div
-                                key={index}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-[#1a1f35] border border-gray-800 rounded-xl text-sm font-medium text-gray-200 hover:border-emerald-500/50 transition"
-                            >
-                                <Tag className="w-4 h-4 text-emerald-400" />
-                                {cat}
-                            </div>
-                        ))}
+                        {incomeCategories.map((cat, index) => {
+                            const isCustom = customCategories.some(c => c.name === cat && c.type === "income");
+                            return (
+                                <div
+                                    key={index}
+                                    className="group flex items-center gap-2 px-4 py-2.5 bg-[#1a1f35] border border-gray-800 rounded-xl text-sm font-medium text-gray-200 hover:border-emerald-500/50 transition"
+                                >
+                                    <Tag className="w-4 h-4 text-emerald-400" />
+                                    <span>{cat}</span>
+                                    {isCustom && (
+                                        <button
+                                            onClick={() => handleDeleteCategory(cat)}
+                                            className="ml-1 text-gray-500 hover:text-rose-400 transition"
+                                            title="Delete Custom Category"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
             </div>
@@ -149,15 +170,27 @@ export default function CategoriesPage() {
                     <p className="text-xs text-gray-500">No expense categories found. Add transactions or custom categories.</p>
                 ) : (
                     <div className="flex flex-wrap gap-3">
-                        {expenseCategories.map((cat, index) => (
-                            <div
-                                key={index}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-[#1a1f35] border border-gray-800 rounded-xl text-sm font-medium text-gray-200 hover:border-rose-500/50 transition"
-                            >
-                                <Tag className="w-4 h-4 text-rose-500" />
-                                {cat}
-                            </div>
-                        ))}
+                        {expenseCategories.map((cat, index) => {
+                            const isCustom = customCategories.some(c => c.name === cat && c.type === "expense");
+                            return (
+                                <div
+                                    key={index}
+                                    className="group flex items-center gap-2 px-4 py-2.5 bg-[#1a1f35] border border-gray-800 rounded-xl text-sm font-medium text-gray-200 hover:border-rose-500/50 transition"
+                                >
+                                    <Tag className="w-4 h-4 text-rose-500" />
+                                    <span>{cat}</span>
+                                    {isCustom && (
+                                        <button
+                                            onClick={() => handleDeleteCategory(cat)}
+                                            className="ml-1 text-gray-500 hover:text-rose-400 transition"
+                                            title="Delete Custom Category"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
             </div>
