@@ -42,13 +42,51 @@ export async function GET(req) {
             .find({ userId })
             .toArray();
 
-        const out = budgets.map(b => ({
-            id: b._id.toString(),
-            category: b.category,
-            limit: b.limit,
-            spent: b.spent || 0,
-            createdAt: b.createdAt,
-        }));
+
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+        const expenses = await db.collection('expenses')
+            .find({
+                userId,
+                type: { $regex: /^expense$/i },
+            })
+            .toArray();
+
+
+        const spentByCategory = {};
+
+        for (const exp of expenses) {
+            const cat = (exp.category || 'General').trim();
+            if (!cat) continue;
+
+            // date check 
+            let expDate = null;
+            if (exp.date) {
+                expDate = new Date(exp.date);
+            } else if (exp.createdAt) {
+                expDate = new Date(exp.createdAt);
+            }
+            if (!expDate || isNaN(expDate.getTime())) continue;
+            if (expDate < monthStart || expDate > monthEnd) continue;
+
+            const key = cat.toLowerCase();
+            spentByCategory[key] = (spentByCategory[key] || 0) + Number(exp.amount || 0);
+        }
+
+        const out = budgets.map(b => {
+            const catKey = (b.category || '').trim().toLowerCase();
+            const calculatedSpent = spentByCategory[catKey] || 0;
+
+            return {
+                id: b._id.toString(),
+                category: b.category,
+                limit: b.limit,
+                spent: calculatedSpent,
+                createdAt: b.createdAt,
+            };
+        });
 
         return new Response(JSON.stringify(out), { status: 200 });
     } catch (error) {
