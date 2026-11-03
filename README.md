@@ -32,7 +32,9 @@ A modern, AI-powered personal finance management application built with **Next.j
 | Data Export | PDF, CSV |
 
 ## 📸 Application Preview
-![Uploading expense-tracker-seven-cyan-18.vercel.app-dashboard.png…]()
+<img width="1290" height="1520" alt="expense-tracker-seven-cyan-18 vercel app-dashboard" src="https://github.com/user-attachments/assets/ab09495f-b226-4172-b0bf-13695b5483c8" />
+<img width="1290" height="1520" alt="expense-tracker-seven-cyan-18 vercel app-dashboard" src="https://github.com/user-attachments/assets/640fc854-6e64-4989-a88a-4fa76ea864d9" />
+
 
 
 ## ⚙️ Getting Started
